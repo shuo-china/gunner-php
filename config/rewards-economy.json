@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "dailyCheck": {
+    "diamondsByDay": [
+      140,
+      400,
+      800,
+      1200,
+      1600,
+      2000,
+      3000
+    ],
+    "dailyLimit": 1
+  },
+  "dailyShare": {
+    "diamonds": 80,
+    "dailyLimit": 1
+  },
+  "redeemCodes": [
+    {
+      "code": "950424",
+      "diamonds": 2000,
+      "mode": "per_player"
+    }
+  ]
+}

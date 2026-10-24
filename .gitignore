@@ -1,0 +1,9 @@
+/.idea
+/.vscode
+/vendor
+*.log
+/.env
+/tests/.runtime/
+
+# Local legacy database backup contains credentials and historical data.
+/database/legacy/kr_bdf.sql
