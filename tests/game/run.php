@@ -133,7 +133,7 @@ try {
     check(request('/v1/auth/wechat', 'POST', [])[0] === 422, 'HTTP empty login rejected');
     check(in_array(request('/v1/auth/wechat')[0], [404, 405], true), 'HTTP login requires POST');
     check(request('/Access/wechat', 'POST', ['code' => 'fake'])[0] === 404, 'conventional controller route cannot bypass explicit routing');
-    check(request('/v1/auth/taptap', 'POST', ['code' => 'fake'])[0] === 404, 'TapTap login is not exposed in this phase');
+    check(request('/v1/auth/taptap', 'POST', ['code' => 'fake', 'openid' => 'victim'])[0] === 422, 'TapTap login rejects client-supplied identity');
     [$status, $body] = request('/v1/auth/me', 'GET', null, $third['token_info']['access_token']);
     check($status === 200 && $body['player']['id'] === $first['player']['id'] && !isset($body['openid']), 'HTTP bearer returns only public player identity');
     check(request('/v1/auth/logout', 'POST', [], $third['token_info']['access_token'])[0] === 200, 'HTTP logout succeeds');

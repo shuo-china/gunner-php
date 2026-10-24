@@ -8,6 +8,11 @@ use app\common\game\service\RewardService;
 
 final class RewardController extends \app\common\BaseController
 {
+    public function startup()
+    {
+        return json((new RewardService())->startup((int) $this->request->gameSession['user_id']), 200, ['Cache-Control' => 'no-store']);
+    }
+
     public function state()
     {
         return json((new RewardService())->state((int) $this->request->gameSession['user_id']), 200, ['Cache-Control' => 'no-store']);

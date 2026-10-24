@@ -66,6 +66,14 @@ try {
     $daily = ['request_id' => 'daily_request_0001', 'base_revision' => '1', 'day_index' => 0];
     rejects(fn() => $rewards->claim($users[6][0], 'daily', $daily), 'SAVE_REQUIRED');
     $newState = $rewards->state($users[6][0]);
+    $newStartup = $rewards->startup($users[6][0]);
+    check($newStartup['save'] === null && $newStartup['revision'] === '0' && $newStartup['daily_check']['canClaim'], 'startup aggregates an unsaved account without creating a save');
+    $startup = $rewards->startup($uid);
+    check($startup['save'] === $raw && $startup['revision'] === '1' && $startup['daily_share']['canClaim'], 'startup returns the exact snapshot bytes and reward state from one revision');
+    check(Db::name('game_reward_request')->count() === 0, 'startup never issues a reward or an idempotency receipt');
+    Db::name('user')->where('id', $users[6][0])->update(['status' => 0]);
+    rejects(fn() => $rewards->startup($users[6][0]), 'ACCOUNT_DISABLED');
+    Db::name('user')->where('id', $users[6][0])->update(['status' => 1]);
     check($newState['daily_check']['canClaim'] && $newState['daily_share']['canClaim'], 'new account without a snapshot has initial reward previews');
     foreach (['diamonds' => 999999, 'now_ms' => 9999999999999, 'user_id' => $otherId, 'save' => $raw] as $key => $value) {
         rejects(fn() => $rewards->claim($uid, 'daily', $daily + [$key => $value]), 'REWARD_INVALID');
@@ -179,6 +187,10 @@ try {
     foreach (['state' => 'GET', 'daily' => 'POST', 'redeem' => 'POST', 'offline' => 'POST'] as $route => $method) check(request('/v1/rewards/' . $route, $method, $method === 'POST' ? [] : null)[0] === 401, 'HTTP ' . $route . ' requires authentication');
     [$status, $body] = request('/v1/rewards/state', 'GET', null, $token);
     check($status === 200 && $body['player_id'] === (string) $uid && !$body['daily_check']['canClaim'], 'HTTP state includes authenticated server daily status');
+    check(request('/v1/startup')[0] === 401, 'HTTP startup requires authentication');
+    [$status, $aggregate] = request('/v1/startup?user_id=' . $otherId, 'GET', null, $token);
+    check($status === 200 && $aggregate['player_id'] === (string) $uid && $aggregate['revision'] === $fresh['revision'] && !$aggregate['daily_check']['canClaim'], 'HTTP startup pins the authenticated owner and current reward ledger');
+    check(request('/Reward/startup', 'GET', null, $token)[0] === 404, 'controller path cannot bypass startup authentication');
     check(request('/v1/rewards/daily', 'POST', $daily + ['diamonds' => 1000000], $token)[0] === 422, 'HTTP rejects client-provided rewards');
     [$status, $body] = request('/v1/rewards/daily', 'POST', $daily, $token);
     check($status === 200 && $body['revision'] === $fresh['revision'] && $body['awarded_revision'] === '2', 'HTTP retry recovers original award and newest cloud head');

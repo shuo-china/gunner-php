@@ -25,10 +25,29 @@ final class RewardService
     public function state(int $userId): array
     {
         $head = $this->saves->read($userId);
+        return $this->stateFromHead($userId, $head);
+    }
+
+    /** Read-only startup snapshot. The same parent lock as saves/claims keeps
+     * the cloud revision and both reward ledgers coherent, including first saves. */
+    public function startup(int $userId): array
+    {
+        return Db::transaction(function () use ($userId) {
+            $user = Db::name('user')->where('id', $userId)->lock(true)->find();
+            if (!$user || (int) $user['status'] !== 1 || $user['delete_time'] !== null) {
+                throw new GameException('ACCOUNT_DISABLED', '账号不可用', 403);
+            }
+            $head = $this->saves->read($userId);
+            return $head + $this->stateFromHead($userId, $head);
+        });
+    }
+
+    private function stateFromHead(int $userId, array $head): array
+    {
         return ['player_id' => (string) $userId, 'namespace' => $this->saves->namespace(),
             'revision' => $head['revision'], 'server_time_ms' => $head['server_time_ms'],
             'next_daily_reset_ms' => $this->nextReset($head['server_time_ms'])]
-            + $this->snapshotState($head['save'], $head['server_time_ms'], $this->latestShareDay($userId));
+            + $this->playerSnapshotState($head['save'], $head['server_time_ms'], $this->latestShareDay($userId), $userId);
     }
 
     public function claim(int $userId, string $kind, array $data): array
@@ -39,6 +58,8 @@ final class RewardService
             // Same lock order as cloud uploads: user, cloud save, then optional shared code.
             $user = Db::name('user')->where('id', $userId)->lock(true)->find();
             if (!$user || (int) $user['status'] !== 1 || $user['delete_time'] !== null) throw new GameException('ACCOUNT_DISABLED', '账号不可用', 403);
+            // Platform comes from the persisted verified identity, never a client flag.
+            if ($kind === 'share' && !$this->shareSupported($userId)) throw new GameException('SHARE_UNSUPPORTED', '当前平台暂不支持分享领奖', 403);
             $current = $this->saves->query('game_save', $userId)->lock(true)->find();
             $receipt = $this->saves->query('game_reward_request', $userId)->where('request_id', $data['request_id'])->find();
             $now = GameSessionService::nowMs();
@@ -190,6 +211,18 @@ final class RewardService
     private function date(int $now): \DateTimeImmutable { return (new \DateTimeImmutable('@' . (string) intdiv($now, 1000)))->setTimezone($this->timezone); }
     private function nextReset(int $now): int { return $this->date($now)->modify('tomorrow')->setTime(0, 0)->getTimestamp() * 1000; }
 
+    private function shareSupported(int $userId): bool
+    {
+        return !Db::name('game_identity')->where('user_id', $userId)->where('provider', 'taptap_mini')->find();
+    }
+
+    private function playerSnapshotState(?string $raw, int $now, string $claimedDay, int $userId): array
+    {
+        $state = $this->snapshotState($raw, $now, $claimedDay);
+        if (!$this->shareSupported($userId)) $state['daily_share']['canClaim'] = false;
+        return $state;
+    }
+
     private function snapshotState(?string $raw, int $now, string $claimedDay): array
     {
         // Only an account without any snapshot has initial reward ledgers.
@@ -206,7 +239,7 @@ final class RewardService
             'awarded_revision' => (string) $receipt['revision'], 'saved_at_ms' => (int) $head['saved_at_ms'],
             'server_time_ms' => $now, 'next_daily_reset_ms' => $this->nextReset($now), 'save' => $head['snapshot'],
             'reward' => json_decode($receipt['reward_json'], true, 64, JSON_THROW_ON_ERROR)]
-            + $this->snapshotState($head['snapshot'], $now, $this->latestShareDay($userId));
+            + $this->playerSnapshotState($head['snapshot'], $now, $this->latestShareDay($userId), $userId);
     }
 
     private function validateRequest(string $kind, array $data): void

@@ -11,4 +11,8 @@ return [
         'app_id' => (string) env('game_wechat.app_id', ''),
         'app_secret' => (string) env('game_wechat.app_secret', ''),
     ],
+    'taptap' => [
+        'app_id' => (string) env('game_taptap.app_id', ''),
+        'app_secret' => (string) env('game_taptap.app_secret', ''),
+    ],
 ];

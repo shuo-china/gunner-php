@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace app\game\controller;
 
 use app\common\game\exception\GameException;
+use app\common\game\platform\IdentityProvider;
+use app\common\game\platform\TapTapMiniProvider;
 use app\common\game\platform\WechatMiniProvider;
 use app\common\game\service\GameSessionService;
 use app\common\game\service\LoginService;
@@ -12,6 +14,16 @@ use app\common\game\service\LoginThrottle;
 final class AccessController extends \app\common\BaseController
 {
     public function wechat()
+    {
+        return $this->login(new WechatMiniProvider((array) config('game.wechat')));
+    }
+
+    public function taptap()
+    {
+        return $this->login($this->app->make(TapTapMiniProvider::class, ['settings' => (array) config('game.taptap')]));
+    }
+
+    private function login(IdentityProvider $provider)
     {
         // Use the peer address. Forwarded headers are not trusted by this login limiter.
         $ip = (string) $this->request->server('REMOTE_ADDR', '127.0.0.1');
@@ -24,7 +36,7 @@ final class AccessController extends \app\common\BaseController
         if (!is_array($data) || array_keys($data) !== ['code'] || !is_string($data['code'])) {
             throw new GameException('PARAM_ERROR', '登录仅接受 code 字段', 422);
         }
-        $result = (new LoginService())->login(new WechatMiniProvider((array) config('game.wechat')), $data['code'], $ip);
+        $result = (new LoginService())->login($provider, $data['code'], $ip);
         // Return only after the transaction commits.
         return json($result, 200, ['Cache-Control' => 'no-store']);
     }

@@ -12,7 +12,7 @@ final class LoginService
     public function login(IdentityProvider $provider, string $code, string $ip): array
     {
         if ($code === '' || strlen($code) > 256 || preg_match('/\s/', $code)) {
-            throw new GameException('PARAM_ERROR', '请提供有效的微信登录 code', 422);
+            throw new GameException('PARAM_ERROR', '请提供有效的登录 code', 422);
         }
         // Exchange once, outside the DB transaction. A code must never be reused on a DB retry.
         $identity = $provider->exchange($code);
